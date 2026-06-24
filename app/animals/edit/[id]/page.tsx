@@ -2,69 +2,56 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import Header from "@/components/Header";
-import Swal from "sweetalert2";
-
-type User = {
-  id: string;
-  email: string;
-  name: string | null;
-  role: "admin" | "user";
-};
+import AnimalForm from "@/components/AnimalForm";
+import { showError, showSuccess } from "@/lib/alerts";
 
 export default function EditAnimalPage() {
   const router = useRouter();
   const params = useParams();
-
-  const id = params.id;
-
-  const [user, setUser] = useState<User | null>(null);
+  const id = params.id as string;
 
   const [name, setName] = useState("");
   const [weight, setWeight] = useState("");
-  const [image, setImage] = useState<File | null>(null);
   const [oldImage, setOldImage] = useState("");
-
-  useEffect(() => {
-    async function getUser() {
-      const res = await fetch("/api/auth/me");
-
-      if (!res.ok) {
-        setUser(null);
-        return;
-      }
-
-      const data = await res.json();
-
-      setUser(data);
-    }
-
-    getUser();
-  }, []);
+  const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       const res = await fetch(`/api/animals/edit/${id}`);
 
+      if (!res.ok) {
+        const data = await res.json();
+        await showError("Error", data.error ?? "Failed to load animal");
+        router.push("/animals");
+        return;
+      }
+
       const animal = await res.json();
 
       setName(animal.name);
       setWeight(animal.avarage_weight ?? "");
-
       setOldImage(animal.image ?? "");
+      setPageLoading(false);
     }
 
     load();
-  }, [id]);
+  }, [id, router]);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit({
+    name: animalName,
+    image,
+    averageWeight,
+  }: {
+    name: string;
+    image: File | null;
+    averageWeight: string;
+  }) {
+    setLoading(true);
 
     const formData = new FormData();
-
-    formData.append("name", name);
-
-    formData.append("avarage_weight", weight);
+    formData.append("name", animalName);
+    formData.append("avarage_weight", averageWeight);
 
     if (image) {
       formData.append("image", image);
@@ -75,96 +62,35 @@ export default function EditAnimalPage() {
       body: formData,
     });
 
-    if (res.ok) {
-      const result = await Swal.fire({
-        title: "Success",
-        text: "You edited the animal.",
-        icon: "success",
-        confirmButtonText: "Ok",
-      });
+    setLoading(false);
 
-      router.push("/animals");
-      router.refresh();
+    if (!res.ok) {
+      const data = await res.json();
+      await showError("Error", data.error ?? "Failed to update animal");
+      return;
     }
+
+    await showSuccess("Success", "You edited the animal.");
+    router.push("/animals");
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow text-slate-500">
+        Loading...
+      </div>
+    );
   }
 
   return (
-    <>
-      <Header user={user} />
-
-      <main className="min-h-[calc(100vh-44px)] py-10 bg-slate-50 px-4">
-        <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Edit Animal</h2>
-
-          <form onSubmit={submit} className="space-y-4">
-            <div>
-              <label className="block mb-1 font-medium">Animal Name</label>
-
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full border rounded-md px-3 py-2"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Image</label>
-
-              {oldImage && (
-                <img
-                  src={oldImage}
-                  alt="animal"
-                  className="w-32 h-32 object-cover rounded-md mb-3"
-                />
-              )}
-
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-
-                  if (file) {
-                    setImage(file);
-                  }
-                }}
-                className="w-full border rounded-md px-3 py-2"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">
-                Average Weight (kg)
-              </label>
-
-              <input
-                type="number"
-                step="0.1"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                className="w-full border rounded-md px-3 py-2"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="
-          bg-blue-600
-          text-white
-          px-4
-          py-2
-          rounded-md
-          hover:bg-blue-700
-          transition
-        "
-            >
-              Update Animal
-            </button>
-          </form>
-        </div>
-      </main>
-    </>
+    <AnimalForm
+      title="Edit Animal"
+      submitLabel="Update Animal"
+      initialName={name}
+      initialWeight={weight}
+      initialImageUrl={oldImage}
+      loading={loading}
+      onSubmit={handleSubmit}
+    />
   );
 }

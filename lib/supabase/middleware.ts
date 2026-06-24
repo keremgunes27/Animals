@@ -11,35 +11,20 @@ export async function updateSession(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
-        get(name) {
-          return req.cookies.get(name)?.value;
+        getAll() {
+          return req.cookies.getAll();
         },
-
-        set(name, value, options) {
-          req.cookies.set({
-            name,
-            value,
-            ...options,
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => {
+            req.cookies.set(name, value);
           });
 
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-        },
-
-        remove(name, options) {
-          req.cookies.set({
-            name,
-            value: "",
-            ...options,
+          response = NextResponse.next({
+            request: req,
           });
 
-          response.cookies.set({
-            name,
-            value: "",
-            ...options,
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
           });
         },
       },
@@ -51,6 +36,7 @@ export async function updateSession(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = req.nextUrl.pathname;
+  const method = req.method;
 
   if (user && path === "/") {
     return NextResponse.redirect(new URL("/animals", req.url));
@@ -60,8 +46,33 @@ export async function updateSession(req: NextRequest) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // admin sayfaları
-  const adminRoutes = ["/animals/add", "/animals/edit", "/animals/delete"];
+  if (path.startsWith("/api/animals")) {
+    if (!user) {
+      response.headers.set("x-middleware-unauthorized", "true");
+      return response;
+    }
+
+    const adminOnly =
+      path.includes("/add") ||
+      path.includes("/edit") ||
+      path.includes("/delete") ||
+      (method !== "GET" && path === "/api/animals");
+
+    if (adminOnly) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.role !== "admin") {
+        response.headers.set("x-middleware-forbidden", "true");
+        return response;
+      }
+    }
+  }
+
+  const adminRoutes = ["/animals/add", "/animals/edit"];
 
   const needsAdmin = adminRoutes.some((route) => path.startsWith(route));
 

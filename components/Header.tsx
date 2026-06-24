@@ -1,16 +1,10 @@
 "use client";
 
-import React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
-
-type User = {
-  id: string;
-  email: string;
-  name: string | null;
-  role: "admin" | "user";
-};
+import { confirmAction } from "@/lib/alerts";
+import type { User } from "@/types/user";
 
 type HeaderProps = {
   user: User | null;
@@ -20,18 +14,13 @@ export default function Header({ user }: HeaderProps) {
   const router = useRouter();
 
   async function logout() {
-    const result = await Swal.fire({
+    const confirmed = await confirmAction({
       title: "Are you sure?",
       text: "You will be logged out from your account.",
-      icon: "warning",
-      showCancelButton: true,
       confirmButtonText: "Yes, logout",
-      cancelButtonText: "Cancel",
-      confirmButtonColor: "#ef4444",
-      cancelButtonColor: "#6b7280",
     });
 
-    if (!result.isConfirmed) {
+    if (!confirmed) {
       return;
     }
 

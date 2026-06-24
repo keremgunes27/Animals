@@ -1,14 +1,25 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/auth";
+import { deleteAnimalImage } from "@/lib/storage";
 
 export async function DELETE(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { error: authError } = await requireAdmin();
+
+  if (authError) {
+    return authError;
+  }
+
   try {
     const { id } = await params;
+    const animalId = Number(id);
 
-    const animalId = id;
+    if (Number.isNaN(animalId)) {
+      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    }
 
     const { data: animal, error: findError } = await supabaseAdmin
       .from("animals")
@@ -16,24 +27,14 @@ export async function DELETE(
       .eq("id", animalId)
       .single();
 
-    // Delete image from storage
-    if (animal.image) {
-      const imageUrl = new URL(animal.image);
-
-      const path = imageUrl.pathname.split("/object/public/animals/")[1];
-
-      if (path) {
-        const { error: storageError } = await supabaseAdmin.storage
-          .from("animals")
-          .remove([path]);
-
-        if (storageError) {
-          console.error(storageError);
-        }
-      }
+    if (findError || !animal) {
+      return NextResponse.json({ error: "Animal not found" }, { status: 404 });
     }
 
-    // Delete database row
+    if (animal.image) {
+      await deleteAnimalImage(animal.image);
+    }
+
     const { error: deleteError } = await supabaseAdmin
       .from("animals")
       .delete()
@@ -43,10 +44,9 @@ export async function DELETE(
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
-    return NextResponse.json({
-      message: "Animal deleted",
-    });
+    return NextResponse.json({ message: "Animal deleted" });
   } catch (error) {
-    return Response.json({ error: "Server error" }, { status: 500 });
+    console.error(error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

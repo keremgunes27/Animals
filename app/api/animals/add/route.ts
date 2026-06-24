@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/auth";
+import { uploadAnimalImage } from "@/lib/storage";
 
 export async function POST(req: Request) {
+  const { error: authError } = await requireAdmin();
+
+  if (authError) {
+    return authError;
+  }
+
   try {
     const formData = await req.formData();
 
@@ -15,30 +23,20 @@ export async function POST(req: Request) {
 
     let imageUrl: string | null = null;
 
-    if (image) {
-      const buffer = Buffer.from(await image.arrayBuffer());
-
-      const fileName = `${Date.now()}-${image.name}`;
-
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from("animals")
-        .upload(fileName, buffer, {
-          contentType: image.type,
-          upsert: false,
-        });
-
-      if (uploadError) {
+    if (image && image.size > 0) {
+      try {
+        imageUrl = await uploadAnimalImage(image);
+      } catch (uploadError) {
         return NextResponse.json(
-          { error: uploadError.message },
+          {
+            error:
+              uploadError instanceof Error
+                ? uploadError.message
+                : "Upload failed",
+          },
           { status: 500 },
         );
       }
-
-      const { data } = supabaseAdmin.storage
-        .from("animals")
-        .getPublicUrl(fileName);
-
-      imageUrl = data.publicUrl;
     }
 
     const { data: animal, error: dbError } = await supabaseAdmin
