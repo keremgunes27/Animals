@@ -20,7 +20,7 @@ async function createAuthClient() {
               cookieStore.set(name, value, options);
             });
           } catch {
-            // Route Handler dışında çağrıldığında set edilemez
+            
           }
         },
       },
